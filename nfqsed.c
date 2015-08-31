@@ -70,9 +70,10 @@ int queue_num = 0;
 
 void usage()
 {
-    fprintf(stderr, "Usage: nfqsed -s /val1/val2 [-s /val1/val2] [-f file]\n"
+    fprintf(stderr, "Usage: nfqsed -s /val1/val2 [-s /val1/val2] [-f file] [-v] [-q num]\n"
             "  -s val1/val2     - replaces occurences of val1 with val2 in the packet payload\n"
             "  -f file          - read replacement rules from the specified file\n"
+            "  -q num           - bind to queue with number 'num' (default 0)\n"
             "  -v               - be verbose\n");
     exit(1);
 }
