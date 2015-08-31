@@ -66,6 +66,7 @@ struct rule_t {
 
 struct rule_t *rules = NULL;
 int verbose = 0;
+int queue_num = 0;
 
 void usage()
 {
@@ -266,8 +267,8 @@ void read_queue()
         exit(1);
     }
 
-    printf("binding this socket to queue '0'\n");
-    qh = nfq_create_queue(h, 0, &cb, NULL);
+    printf("binding this socket to queue '%d'\n", queue_num);
+    qh = nfq_create_queue(h, queue_num, &cb, NULL);
     if (!qh) {
         fprintf(stderr, "error during nfq_create_queue()\n");
         exit(1);
@@ -304,7 +305,7 @@ void read_queue()
 int main(int argc, char *argv[])
 {
     int opt;
-    while ((opt = getopt(argc, argv, "vs:f:")) != -1) {
+    while ((opt = getopt(argc, argv, "vs:f:q:")) != -1) {
         switch (opt) {
             case 'v':
                 verbose = 1;
@@ -314,6 +315,9 @@ int main(int argc, char *argv[])
                 break;
             case 'f':
                 load_rules(optarg);
+                break;
+            case 'q':
+                queue_num = atoi(optarg);
                 break;
             default:
                 usage();
