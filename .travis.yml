@@ -1,0 +1,21 @@
+language: c
+
+cache: apt
+
+dist: trusty
+
+sudo: false
+
+os:
+  - linux
+
+compiler:
+  - gcc
+
+script:
+  - make
+
+addons:
+  apt:
+    packages:
+        - libnetfilter-queue-dev
