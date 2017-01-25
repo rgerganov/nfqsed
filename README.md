@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/rgerganov/nfqsed.svg?branch=master)](https://travis-ci.org/rgerganov/nfqsed)
+
 `nfqsed` is a command line utility that transparently modifies network traffic using a 
 predefined set of substitution rules. It runs on Linux and uses the `netfilter_queue`
 library. It is similar to `netsed` but it also allows modifying the network traffic 
