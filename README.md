@@ -3,7 +3,7 @@
 `nfqsed` is a command line utility that transparently modifies network traffic using a 
 predefined set of substitution rules. It runs on Linux and uses the `netfilter_queue`
 library. It is similar to `netsed` but it also allows modifying the network traffic 
-passing through an ethernet bridge. This is especially useful in situations where the
+passing through an ethernet bridge. This is especially useful in [situations][1] where the
 source MAC address needs to stay unchanged.
 
 Usage
@@ -28,3 +28,4 @@ TODO
  * different lengths of val1 and val2
  * binary rules
 
+[1]: http://xakcop.com/post/mitm-stb/ 
