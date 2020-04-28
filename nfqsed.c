@@ -29,6 +29,9 @@ THE SOFTWARE.
 
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
+#define IPT_TCP (6)
+#define IPT_UDP (17)
+
 struct ip_hdr {
     uint8_t vhl;
     uint8_t tos;
@@ -54,8 +57,16 @@ struct tcp_hdr {
     uint16_t urp;
 };
 
+struct udp_hdr {
+    uint16_t sport;
+    uint16_t dport;
+    uint16_t length;
+    uint16_t sum;
+};
+
 #define IP_HL(ip)   (((ip)->vhl) & 0x0f)
 #define TH_OFF(th)  (((th)->off & 0xf0) >> 4)
+#define TH_OFF_UDP (8)
 
 struct rule_t {
     uint8_t *val1;
@@ -152,9 +163,8 @@ void load_rules(const char *rules_file)
     fclose(f);
 }
 
-uint16_t tcp_sum(uint16_t len_tcp, uint16_t *src_addr, uint16_t *dest_addr, uint8_t *buff)
+uint16_t csum(uint16_t proto, uint16_t len, uint16_t *src_addr, uint16_t *dest_addr, uint8_t *buff)
 {
-    uint16_t prot_tcp = 6;
     uint32_t sum = 0;
     int i = 0;
 
@@ -162,13 +172,13 @@ uint16_t tcp_sum(uint16_t len_tcp, uint16_t *src_addr, uint16_t *dest_addr, uint
     sum += ntohs(src_addr[1]);
     sum += ntohs(dest_addr[0]);
     sum += ntohs(dest_addr[1]);
-    sum += len_tcp;
-    sum += prot_tcp;
-    for (i=0; i<(len_tcp/2); i++) {
+    sum += len;
+    sum += proto;
+    for (i=0; i<(len/2); i++) {
         sum += ntohs((buff[i*2+1] << 8) | buff[i*2]);
     }
-    if ((len_tcp % 2) == 1) {
-        sum += buff[len_tcp-1] << 8;
+    if ((len % 2) == 1) {
+        sum += buff[len-1] << 8;
     }
     while (sum >> 16) {
         sum = (sum & 0xFFFF) + (sum >> 16);
@@ -201,10 +211,11 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 {
     int id = 0, len = 0;
     struct nfqnl_msg_packet_hdr *ph;
-    uint8_t *payload=NULL, *tcp_payload, *pos;
+    uint8_t *payload=NULL, *proto_payload, *pos;
     struct ip_hdr *ip;
     struct tcp_hdr *tcp;
-    uint16_t ip_size = 0, tcp_size = 0;
+    struct udp_hdr *udp;
+    uint16_t ip_size = 0, proto_size = 0;
     struct rule_t *rule = rules;
 
     ph = nfq_get_msg_packet_hdr(nfa);
@@ -217,17 +228,25 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         return len;
     }
     ip = (struct ip_hdr*) payload;
-    if (ip->proto != 6) {
-        // only tcp is supported
+    ip_size = IP_HL(ip)*4;
+
+    if (ip->proto == IPT_TCP) {
+        // Try to match TCP packets
+        tcp = (struct tcp_hdr*)(payload + ip_size);
+        proto_size = TH_OFF(tcp)*4;
+    } else if (ip->proto == IPT_UDP) {
+        // Try to match UDP packets
+        udp = (struct udp_hdr*)(payload + ip_size);
+        proto_size = TH_OFF_UDP;
+    } else {
+        // Do not accept protos other than TCP & UDP
         return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
     }
-    ip_size = IP_HL(ip)*4;
-    tcp = (struct tcp_hdr*)(payload + ip_size);
-    tcp_size = TH_OFF(tcp)*4;
-    tcp_payload = (uint8_t*)(payload + ip_size + tcp_size);
-    
+
+    proto_payload = (uint8_t*)(payload + ip_size + proto_size);
+
     while (rule) {
-        while ((pos = find(rule, tcp_payload, len - ip_size - tcp_size)) != NULL) {
+        while ((pos = find(rule, proto_payload, len - ip_size - proto_size)) != NULL) {
             if (verbose) {
                 printf("rule match, changing payload: ");
                 print_rule(rule);
@@ -236,8 +255,17 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         }
         rule = rule->next;
     }
-    tcp->sum = 0;
-    tcp->sum = tcp_sum(len-ip_size, ip->src, ip->dst, (uint8_t*) tcp);
+
+    if (ip->proto == IPT_TCP) {
+        // Reset TCP checksum
+        tcp->sum = 0;
+        tcp->sum = csum(IPT_TCP, len-ip_size, ip->src, ip->dst, (uint8_t*) tcp);
+    } else {
+        // Reset UDP checksum
+        udp->sum = 0;
+        udp->sum = csum(IPT_UDP, len-ip_size, ip->src, ip->dst, (uint8_t*) udp);
+    }
+
     return nfq_set_verdict(qh, id, NF_ACCEPT, len, payload);
 }
 
