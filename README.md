@@ -24,7 +24,6 @@ forwarded packets that have destination port 554:
 
 TODO
 ----
- * UDP support
  * different lengths of val1 and val2
  * binary rules
 
