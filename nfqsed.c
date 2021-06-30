@@ -81,8 +81,9 @@ int queue_num = 0;
 
 void usage()
 {
-    fprintf(stderr, "Usage: nfqsed -s /val1/val2 [-s /val1/val2] [-f file] [-v] [-q num]\n"
+    fprintf(stderr, "Usage: nfqsed [-s /val1/val2] [-x /hex1/hex2] [-f file] [-v] [-q num]\n"
             "  -s val1/val2     - replaces occurences of val1 with val2 in the packet payload\n"
+            "  -x hex1/hex2     - replaces occurences of hex1 with hex2 in the packet payload\n"
             "  -f file          - read replacement rules from the specified file\n"
             "  -q num           - bind to queue with number 'num' (default 0)\n"
             "  -v               - be verbose\n");
@@ -93,11 +94,11 @@ void print_rule(const struct rule_t *rule)
 {
     int i = 0;
     for (i = 0 ; i < rule->length ; i++) {
-        printf("%x", rule->val1[i]);
+        printf("%02x", rule->val1[i]);
     }
     printf(" -> ");
     for (i = 0 ; i < rule->length ; i++) {
-        printf("%x", rule->val2[i]);
+        printf("%02x", rule->val2[i]);
     }
     printf("\n");
 }
@@ -127,6 +128,58 @@ void add_rule(const char *rule_str)
     memcpy(rule->val1, rule_str + 1, length);
     rule->val2 = malloc(length);
     memcpy(rule->val2, pos + 1, length);
+    rule->length = length;
+    rule->next = NULL;
+    if (rules) {
+        rule->next = rules;
+        rules = rule;
+    } else {
+        rules = rule;
+    }
+}
+
+void str_to_hex(const char *str, uint8_t *dest, int length)
+{
+    for (int i = 0 ; i < length ; i++) {
+        int ret = sscanf(str, "%2hhx", &dest[i]);
+        if (ret != 1) {
+            fprintf(stderr, "Incorrect hex byte: %c%c\n", str[0], str[1]);
+            exit(1);
+        }
+        str += 2;
+    }
+}
+
+void add_hex_rule(const char *rule_str)
+{
+    char delim = rule_str[0];
+    char *pos = NULL;
+    int length = 0;
+    struct rule_t *rule;
+    if (strlen(rule_str) < 6) {
+        fprintf(stderr, "hex rule too short: %s\n", rule_str);
+        exit(1);
+    }
+    pos = strchr(rule_str+1, delim);
+    if (!pos) {
+        fprintf(stderr, "incorrect hex rule: %s\n", rule_str);
+        exit(1);
+    }
+    length = strlen(pos+1);
+    if (length % 2 == 1) {
+        fprintf(stderr, "hex rule values must have even length\n");
+        exit(1);
+    }
+    if (pos - rule_str - 1 != length) {
+        fprintf(stderr, "hex1 and hex2 must have the same length: %s\n", rule_str);
+        exit(1);
+    }
+    length /= 2;
+    rule = malloc(sizeof(struct rule_t));
+    rule->val1 = malloc(length);
+    str_to_hex(rule_str+1, rule->val1, length);
+    rule->val2 = malloc(length);
+    str_to_hex(pos+1, rule->val2, length);
     rule->length = length;
     rule->next = NULL;
     if (rules) {
@@ -334,13 +387,16 @@ void read_queue()
 int main(int argc, char *argv[])
 {
     int opt;
-    while ((opt = getopt(argc, argv, "vs:f:q:")) != -1) {
+    while ((opt = getopt(argc, argv, "vs:x:f:q:")) != -1) {
         switch (opt) {
             case 'v':
                 verbose = 1;
                 break;
             case 's':
                 add_rule(optarg);
+                break;
+            case 'x':
+                add_hex_rule(optarg);
                 break;
             case 'f':
                 load_rules(optarg);
